@@ -95,15 +95,15 @@ SV *encode_uri_component(SV *sstr){
     src   = (U8 *)SvPV_nolen(str);
     dst   = (U8 *)SvPV_nolen(result);
 
-    for (i = 0; i < slen; i++){
-	if (escapes[ src[i] ]){
-	    dst[dlen++] = '%';
-	    dst[dlen++] = hex_chars[src[i]>>4];
-	    dst[dlen++] = hex_chars[src[i]%16];
-	}
-	else{
-	    dst[dlen++] = src[i];
-	}
+    for (i = 0; i < slen; i++) {
+    	if (escapes[ src[i] ]){
+    	    dst[dlen++] = '%';
+    	    dst[dlen++] = hex_chars[src[i]>>4];
+    	    dst[dlen++] = hex_chars[src[i]%16];
+    	}
+    	else{
+    	    dst[dlen++] = src[i];
+    	}
     }
     dst[dlen] = '\0'; /*  for sure; */
     SvCUR_set(result, dlen);
@@ -205,61 +205,72 @@ decode_uri_component_fast(SV *suri)
     SvPOK_on(result);
 
     while (*src) {
-        if ((*src == '%') &&
-            ((a = src[1]) && (b = src[2])) &&
-            (isxdigit(a) && isxdigit(b)))
+        if (src[0] == '%' &&
+            isxdigit(src[1]) &&
+            isxdigit(src[2]))
         {
-            *dst++ = (uri_decode_tbl[(int)a]<<4)|uri_decode_tbl[(int)b];
+            *dst++ = ((uri_decode_tbl[(int)src[1]] << 4) |
+                      (uri_decode_tbl[(int)src[2]]     ));
             src += 3;
             cur -= 2;
         }
-        else if(src[1] == 'u'
-            && isxdigit(src[2]) && isxdigit(src[3])
-            && isxdigit(src[4]) && isxdigit(src[5]))
+        else if (src[0] == '%' &&
+                 src[1] == 'u' &&
+                 isxdigit(src[2]) &&
+                 isxdigit(src[3]) &&
+                 isxdigit(src[4]) &&
+                 isxdigit(src[5]))
         {
-            int hi, lo;
-            strncpy((char *)buf, (char *)(src + 2), 4);
+            unsigned int hi = ((uri_decode_tbl[(int)src[2]] << 12) |
+                               (uri_decode_tbl[(int)src[3]] <<  8) |
+                               (uri_decode_tbl[(int)src[4]] <<  4) |
+                               (uri_decode_tbl[(int)src[5]]      ));
+            memcpy(buf, src + 2, 4);
             buf[4] = '\0'; /* RT#39135 */
-            hi = strtol((char *)buf, NULL, 16);
             src += 5;
-            if (hi < 0xD800  || 0xDFFF < hi){
+            if (hi < 0xD800  || 0xDFFF < hi) {
                 bp = uvchr_to_utf8((U8 *)buf, (UV)hi);
-                strncpy(dst, (char *)buf, bp - buf);
+                memcpy(dst, buf, bp - buf);
                 dst += bp - buf;
                 cur -= 5 - (bp - buf);
             }
+            else if (0xDC00 <= hi){ /* invalid */
+                warn("U+%04X is an invalid surrogate hi\n", hi);
+            }
             else {
-                if (0xDC00 <= hi){ /* invalid */
-                    warn("U+%04X is an invalid surrogate hi\n", hi);
-                }
-                else {
-                    src++; /* hmm */
-                    if(*src == '%' && src[1] == 'u'
-                       && isxdigit(src[2]) && isxdigit(src[3])
-                       && isxdigit(src[4]) && isxdigit(src[5]))
-                    {
-                        strncpy((char *)buf, (char *)(src + 2), 4);
-                        lo = strtol((char *)buf, NULL, 16);
-                        src += 5;
-                        if (lo < 0xDC00 || 0xDFFF < lo){
-                            warn("U+%04X is an invalid lo surrogate", lo);
-                        }
-                        else {
-                            lo += 0x10000
-                                  + (hi - 0xD800) * 0x400 -  0xDC00;
-                            bp  = uvchr_to_utf8((U8 *)buf, (UV)lo);
-                            strncpy(dst, (char *)buf, bp - buf);
-                            dst += bp - buf;
-                cur -= 12 - (bp - buf);
-                        }
+                src++; /* hmm */
+                if (src[0] == '%' &&
+                    src[1] == 'u' &&
+                    isxdigit(src[2]) &&
+                    isxdigit(src[3]) &&
+                    isxdigit(src[4]) &&
+                    isxdigit(src[5]))
+                {
+                    unsigned int lo = ((uri_decode_tbl[(int)src[2]] << 12) |
+                                       (uri_decode_tbl[(int)src[3]] <<  8) |
+                                       (uri_decode_tbl[(int)src[4]] <<  4) |
+                                       (uri_decode_tbl[(int)src[5]]      ));
+                    memcpy(buf, src + 2, 4);
+                    buf[4] = '\0';
+                    src += 5;
+                    if (lo < 0xDC00 || 0xDFFF < lo){
+                        warn("U+%04X is an invalid lo surrogate", lo);
                     }
                     else {
-                        warn("lo surrogate is missing for U+%04X", hi);
+                        lo += 0x10000
+                              + (hi - 0xD800) * 0x400 -  0xDC00;
+                        bp  = uvchr_to_utf8((U8 *)buf, (UV)lo);
+                        memcpy(dst, buf, bp - buf);
+                        dst += bp - buf;
+                        cur -= 12 - (bp - buf);
                     }
+                }
+                else {
+                    warn("lo surrogate is missing for U+%04X", hi);
                 }
             }
         }
-        else if (*src == '+') {
+        else if (src[0] == '+') {
             *dst++ = ' ';
             src++;
         }
