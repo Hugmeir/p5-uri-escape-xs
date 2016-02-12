@@ -1,5 +1,6 @@
 Changes
 MANIFEST
+MANIFEST.SKIP
 META.yml # Will be created by "make dist"
 Makefile.PL
 README
@@ -7,8 +8,8 @@ XS.xs
 lib/URI/Escape/XS.pm
 t/00-load.t
 t/01-compat.t
-t/02-basic.t 
-t/03-hashu.t 
+t/02-basic.t
+t/03-hashu.t
 t/04-idn.t
 t/05-null.t
 t/06-nonstr.t
