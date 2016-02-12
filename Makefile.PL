@@ -2,6 +2,18 @@ use strict;
 use warnings;
 use ExtUtils::MakeMaker;
 
+use if $] < 5.014, "Devel::CallChecker";
+use if $] < 5.014, "IO::File";
+
+write_header('callchecker0.h', &Devel::CallChecker::callchecker0_h) if $] < 5.014;
+
+sub write_header {
+    my ($header, $content) = @_;
+    my $fh = IO::File->new($header, 'w') or die $!;
+    $fh->print($content) or die $!;
+    $fh->close or die $!;
+}
+
 WriteMakefile(
     NAME          => 'URI::Escape::XS',
     AUTHOR        => 'Dan Kogai <dankogai+cpan@gmail.com>',

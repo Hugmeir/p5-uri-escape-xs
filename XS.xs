@@ -161,6 +161,165 @@ SV *decode_uri_component(SV *suri){
     return result;
 }
 
+SV *
+decode_uri_component_fast(SV *suri)
+{
+    char a, b;
+    SV *result;
+    char *src, *dst;
+    U8 buf[8], *bp;
+    STRLEN len, cur;
+
+    if (suri == &PL_sv_undef) return &PL_sv_no;
+
+    cur = SvCUR(suri);
+    src = SvPV(suri, len);
+
+    result = newSV(len);
+    dst    = SvPVX(result);
+    SvPOK_on(result);
+    
+    while (*src) {
+        if ((*src == '%') &&
+            ((a = src[1]) && (b = src[2])) &&
+            (isxdigit(a) && isxdigit(b)))
+        {
+            if (a >= 'a') {
+                    a -= 'a'-'A';
+            }
+            if (a >= 'A') {
+                    a -= ('A' - 10);
+            }
+            else {
+                    a -= '0';
+            }
+            if (b >= 'a') {
+                    b -= 'a'-'A';
+            }
+            if (b >= 'A') {
+                    b -= ('A' - 10);
+            }
+            else {
+                    b -= '0';
+            }
+            *dst++ = (a<<4)|b;
+            src += 3;
+            cur -= 2;
+        }
+        else if(src[1] == 'u'
+            && isxdigit(src[2]) && isxdigit(src[3])
+            && isxdigit(src[4]) && isxdigit(src[5]))
+        {
+            int hi, lo;
+            strncpy((char *)buf, (char *)(src + 2), 4);
+            buf[4] = '\0'; /* RT#39135 */
+            hi = strtol((char *)buf, NULL, 16);
+            src += 5;
+            if (hi < 0xD800  || 0xDFFF < hi){
+                bp = uvchr_to_utf8((U8 *)buf, (UV)hi);
+                strncpy(dst, (char *)buf, bp - buf);
+                dst += bp - buf;
+                cur -= 5 - (bp - buf);
+            }
+            else {
+                if (0xDC00 <= hi){ /* invalid */
+                    warn("U+%04X is an invalid surrogate hi\n", hi);
+                }
+                else {
+                    src++; /* hmm */
+                    if(*src == '%' && src[1] == 'u'
+                       && isxdigit(src[2]) && isxdigit(src[3])
+                       && isxdigit(src[4]) && isxdigit(src[5]))
+                    {
+                        strncpy((char *)buf, (char *)(src + 2), 4);
+                        lo = strtol((char *)buf, NULL, 16);
+                        src += 5;
+                        if (lo < 0xDC00 || 0xDFFF < lo){
+                            warn("U+%04X is an invalid lo surrogate", lo);
+                        }
+                        else {
+                            lo += 0x10000
+                                  + (hi - 0xD800) * 0x400 -  0xDC00;
+                            bp  = uvchr_to_utf8((U8 *)buf, (UV)lo);
+                            strncpy(dst, (char *)buf, bp - buf);
+                            dst += bp - buf;
+                cur -= 12 - (bp - buf);
+                        }
+                    }
+                    else {
+                        warn("lo surrogate is missing for U+%04X", hi);
+                    }
+                }
+            }
+        }
+        else if (*src == '+') {
+            *dst++ = ' ';
+            src++;
+        }
+        else {
+            *dst++ = *src++;
+        }
+    }
+    *dst++ = '\0';
+
+    SvCUR_set(result, cur);
+    return result;
+}
+
+static OP *
+S_pp_decode_uri_fast(pTHX)
+{
+    dSP;
+    SV *src = POPs;
+    PUTBACK;
+
+    SV *ret = decode_uri_component_fast(src);
+    sv_dump(ret);
+    SPAGAIN;
+    XPUSHs(ret);
+    PUTBACK;
+
+    return NORMAL;
+}
+
+static OP *
+S_ck_decode_uri_fast(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
+{
+    CV *cv = (CV*)ckobj;
+    OP *pushop, *firstargop, *cvop, *lastargop, *argop, *newop;
+    int arity;
+ 
+    entersubop = ck_entersub_args_proto(entersubop, namegv, (SV*)cv);
+    pushop = cUNOPx(entersubop)->op_first;
+    if ( ! pushop->op_sibling )
+        pushop = cUNOPx(pushop)->op_first;
+    firstargop = pushop->op_sibling;
+ 
+    for (cvop = firstargop; cvop->op_sibling; cvop = cvop->op_sibling) ;
+ 
+    lastargop = pushop;
+    for (
+        lastargop = pushop, argop = firstargop;
+        argop != cvop;
+        lastargop = argop, argop = argop->op_sibling
+    ) ;
+ 
+    pushop->op_sibling = cvop;
+    lastargop->op_sibling = NULL;
+    newop = newUNOP(OP_NULL, 0, firstargop);
+    newop->op_type    = OP_CUSTOM;
+    newop->op_private = entersubop->op_private;
+    newop->op_ppaddr  = S_pp_decode_uri_fast;
+
+    op_free(entersubop);
+
+    return newop;
+}
+
+#ifdef XopENTRY_set
+static XOP my_xop, my_wrapop;
+#endif
+
 MODULE = URI::Escape::XS		PACKAGE = URI::Escape::XS
 PROTOTYPES: ENABLE
 
@@ -177,5 +336,27 @@ decodeURIComponent(str)
     SV *str;
 CODE:
     RETVAL = decode_uri_component(str);
+    sv_dump(RETVAL);
 OUTPUT:
     RETVAL
+
+
+SV *
+decodeURIComponent_fast(str)
+    SV *str;
+CODE:
+    RETVAL = decode_uri_component_fast(str);
+OUTPUT:
+    RETVAL
+
+BOOT:
+{
+    CV * const cv = get_cvn_flags("URI::Escape::XS::decodeURIComponent_fast", 40, 0);
+    cv_set_call_checker(cv, S_ck_decode_uri_fast, (SV *)cv);
+#ifdef XopENTRY_set
+    XopENTRY_set(&my_xop, xop_name, "decodeURIComponent_fast");
+    XopENTRY_set(&my_xop, xop_desc, "decodeURIComponent_fast");
+    XopENTRY_set(&my_xop, xop_class, OA_UNOP);
+    Perl_custom_op_register(aTHX_ S_pp_decode_uri_fast, &my_xop);
+#endif /* XopENTRY_set */
+}

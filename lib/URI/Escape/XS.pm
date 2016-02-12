@@ -8,10 +8,11 @@ use strict;
 our $VERSION = sprintf "%d.%02d", q$Revision: 0.13 $ =~ /(\d+)/g;
 
 use base qw(Exporter);
-our @EXPORT    = qw(encodeURIComponent decodeURIComponent
+our @EXPORT    = qw(encodeURIComponent decodeURIComponent decodeURIComponent_fast
 		    encodeURIComponentIDN decodeURIComponentIDN);
 our @EXPORT_OK = qw(uri_escape uri_unescape);
 
+use if $] < 5.014, "Devel::CallChecker";
 require XSLoader;
 XSLoader::load('URI::Escape::XS', $VERSION);
 
