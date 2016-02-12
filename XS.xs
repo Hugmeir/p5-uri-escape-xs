@@ -14,25 +14,50 @@
 # include <string.h>
 # include <ctype.h>
 
-static char escapes[256] = 
+static char escapes[256] =
 /*  0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f */
 {
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
-    1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 
-    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0, 
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 0, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1,
+    1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 0,
     1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1
+};
+
+/*
+ * Table has a 0 if that character cannot be a hex digit;
+ * otherwise it has the decimal value for that hex digit.
+ */
+static char uri_decode_tbl[256] =
+/*    0    1    2    3    4    5    6    7    8    9    a    b    c    d    e    f */
+{
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 0:   0 ~  15 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 1:  16 ~  31 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 2:  32 ~  47 */
+      0,   1,   2,   3,   4,   5,   6,   7,   8,   9,   0,   0,   0,   0,   0,   0,  /* 3:  48 ~  63 */
+      0,  10,  11,  12,  13,  14,  15,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 4:  64 ~  79 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 5:  80 ~  95 */
+      0,  10,  11,  12,  13,  14,  15,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 6:  96 ~ 111 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 7: 112 ~ 127 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 8: 128 ~ 143 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* 9: 144 ~ 159 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* a: 160 ~ 175 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* b: 176 ~ 191 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* c: 192 ~ 207 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* d: 208 ~ 223 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* e: 224 ~ 239 */
+      0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* f: 240 ~ 255 */
 };
 
 static char hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
@@ -43,7 +68,7 @@ static inline int my_hextol(const char *buf) {
 }
 #else
 static inline char my_hextoh(const char c) {
-    return c <  '0' ? 0 
+    return c <  '0' ? 0
         :  c <= '9' ? c - '0'
         :  c <= 'F' ? c - 'A' + 10
         :  c <= 'f' ? c - 'a' + 10
@@ -65,7 +90,7 @@ SV *encode_uri_component(SV *sstr){
     slen   = SvCUR(str);
     dlen   = 0;
     result = newSV(slen * 3 + 1); /* at most 3 times */
-    
+
     SvPOK_on(result);
     src   = (U8 *)SvPV_nolen(str);
     dst   = (U8 *)SvPV_nolen(result);
@@ -97,7 +122,7 @@ SV *decode_uri_component(SV *suri){
     slen = SvCUR(uri);
     dlen = 0;
     result = newSV(slen + 1);
-   
+
     SvPOK_on(result);
     dst  = (U8 *)SvPV_nolen(result);
     src  = (U8 *)SvPV_nolen(uri);
@@ -178,31 +203,13 @@ decode_uri_component_fast(SV *suri)
     result = newSV(len);
     dst    = SvPVX(result);
     SvPOK_on(result);
-    
+
     while (*src) {
         if ((*src == '%') &&
             ((a = src[1]) && (b = src[2])) &&
             (isxdigit(a) && isxdigit(b)))
         {
-            if (a >= 'a') {
-                    a -= 'a'-'A';
-            }
-            if (a >= 'A') {
-                    a -= ('A' - 10);
-            }
-            else {
-                    a -= '0';
-            }
-            if (b >= 'a') {
-                    b -= 'a'-'A';
-            }
-            if (b >= 'A') {
-                    b -= ('A' - 10);
-            }
-            else {
-                    b -= '0';
-            }
-            *dst++ = (a<<4)|b;
+            *dst++ = (uri_decode_tbl[(int)a]<<4)|uri_decode_tbl[(int)b];
             src += 3;
             cur -= 2;
         }
@@ -288,22 +295,22 @@ S_ck_decode_uri_fast(pTHX_ OP *entersubop, GV *namegv, SV *ckobj)
     CV *cv = (CV*)ckobj;
     OP *pushop, *firstargop, *cvop, *lastargop, *argop, *newop;
     int arity;
- 
+
     entersubop = ck_entersub_args_proto(entersubop, namegv, (SV*)cv);
     pushop = cUNOPx(entersubop)->op_first;
     if ( ! pushop->op_sibling )
         pushop = cUNOPx(pushop)->op_first;
     firstargop = pushop->op_sibling;
- 
+
     for (cvop = firstargop; cvop->op_sibling; cvop = cvop->op_sibling) ;
- 
+
     lastargop = pushop;
     for (
         lastargop = pushop, argop = firstargop;
         argop != cvop;
         lastargop = argop, argop = argop->op_sibling
     ) ;
- 
+
     pushop->op_sibling = cvop;
     lastargop->op_sibling = NULL;
     newop = newUNOP(OP_NULL, 0, firstargop);
