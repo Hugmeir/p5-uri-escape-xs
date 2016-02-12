@@ -64,25 +64,6 @@ static char uri_decode_tbl[256] =
       0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,  /* f: 240 ~ 255 */
 };
 
-static char hex_chars[16] = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
-
-#ifdef EBCDIC
-static inline int my_hextol(const char *buf) {
-    return (int)strtol((char *)buf, NULL, 16);
-}
-#else
-static inline char my_hextoh(const char c) {
-    return c <  '0' ? 0
-        :  c <= '9' ? c - '0'
-        :  c <= 'F' ? c - 'A' + 10
-        :  c <= 'f' ? c - 'a' + 10
-        :  0;
-}
-static inline int my_hextol(const char *buf){
-    return (my_hextoh(buf[0]) << 4) + my_hextoh(buf[1]);
-}
-#endif
-
 SV *encode_uri_component(SV *sstr){
     SV *str, *result;
     int slen, dlen;
